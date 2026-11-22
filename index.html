@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador Sumo mBot2 Web - Drag & Drop</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; user-select: none; }
+  body { display: flex; height: 100vh; background: #11111b; color: #cdd6f4; overflow: hidden; }
+  
+  /* Panel Izquierdo: Editor */
+  #left { width: 58%; display: flex; flex-direction: column; background: #181825; border-right: 2px solid #313244; }
+  .toolbar { display: flex; gap: 6px; padding: 10px; background: #181825; border-bottom: 1px solid #313244; flex-wrap: wrap; align-items: center; }
+  button { padding: 6px 12px; border: none; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; color: #fff; transition: 0.15s; }
+  button:hover { filter: brightness(1.15); }
+  .btn-p1 { background: #3b82f6; }
+  .btn-p2 { background: #ef4444; }
+  .btn-off { background: #313244; color: #a6adc8; }
+  .btn-gray { background: #45475a; }
+  .btn-play { background: #10b981; }
+  .btn-stop { background: #f59e0b; }
+
+  .editor-body { display: flex; flex: 1; overflow: hidden; }
+  
+  /* Paleta */
+  .palette { width: 295px; background: #181825; padding: 10px; overflow-y: auto; border-right: 1px solid #313244; display: flex; flex-direction: column; gap: 5px; }
+  .pal-hint { font-size: 11px; color: #facc15; font-weight: bold; margin-bottom: 4px; }
+  .cat-title { font-size: 12px; font-weight: bold; margin-top: 8px; margin-bottom: 2px; }
+  .c-blue { color: #4c97ff; }
+  .c-green { color: #0fbd8c; }
+  .c-yellow { color: #ffbf00; }
+
+  .pal-item { padding: 7px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 600; cursor: grab; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: transform 0.1s; }
+  .pal-item:active { cursor: grabbing; transform: scale(0.98); }
+  .bg-mov { background: #2b7de9; color: #fff; }
+  .bg-sen { background: #0fbd8c; color: #fff; }
+  .bg-ctl { background: #ffbf00; color: #111; }
+  .bg-evt { background: #ffab19; color: #111; }
+
+  /* Workspace */
+  .workspace { flex: 1; background: #1e1e2e; background-image: radial-gradient(#313244 1px, transparent 1px); background-size: 20px 20px; padding: 14px; overflow-y: auto; }
+  .evt-header { padding: 8px 12px; border-radius: 6px 6px 0 0; font-size: 12px; font-weight: bold; }
+  .drop-zone { min-height: 55px; padding: 8px; border: 1.5px dashed #45475a; border-radius: 0 0 6px 6px; background: rgba(24, 24, 37, 0.55); transition: 0.15s; }
+  .drop-zone.sub-then { border-color: #10b981; border-radius: 6px; margin-top: 5px; min-height: 42px; background: rgba(17, 17, 27, 0.65); }
+  .drop-zone.sub-else { border-color: #f59e0b; border-radius: 6px; margin-top: 5px; min-height: 42px; background: rgba(17, 17, 27, 0.65); }
+  .drop-zone.drag-over { background: rgba(16, 185, 129, 0.18); border-color: #34d399; }
+  .empty-msg { font-size: 11px; color: #7f849c; text-align: center; padding: 10px 0; pointer-events: none; }
+
+  /* Bloques en Workspace */
+  .ws-block { padding: 6px 8px; border-radius: 6px; margin-bottom: 5px; font-size: 11.5px; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.35); position: relative; }
+  .ws-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .grip { cursor: grab; padding: 0 4px; opacity: 0.75; font-weight: bold; }
+  .grip:hover { opacity: 1; }
+  .ws-block select, .ws-block input[type="number"] {
+    background: rgba(0, 0, 0, 0.25); color: inherit; border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px; padding: 2px 4px; font-size: 11px; font-weight: bold; outline: none;
+  }
+  .bg-ctl select, .bg-ctl input[type="number"] { background: rgba(255, 255, 255, 0.65); color: #111; border-color: rgba(0,0,0,0.25); }
+  .ws-block select option { background: #1e1e2e; color: #fff; }
+  .ws-block input[type="number"] { width: 48px; text-align: center; }
+  .btn-del { margin-left: auto; background: #ef4444; color: #fff; border: none; border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; }
+  .else-label { font-size: 11px; font-weight: bold; margin-top: 5px; display: block; }
+
+  /* Panel Derecho: Arena */
+  #right { width: 42%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 12px; background: #11111b; }
+  .sim-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 12px; }
+  .sim-controls label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  input[type="range"] { width: 85px; accent-color: #10b981; }
+  canvas { background: #1e1e2e; border-radius: 10px; border: 2px solid #313244; box-shadow: 0 8px 24px rgba(0,0,0,0.5); max-width: 100%; height: auto; }
+  .telem-bar { width: 100%; background: #181825; color: #0fbd8c; font-family: monospace; font-size: 12px; font-weight: bold; padding: 7px 10px; border-radius: 6px; text-align: center; border: 1px solid #313244; }
+  .status-bar { width: 100%; background: #181825; color: #cdd6f4; font-size: 12.5px; font-weight: bold; padding: 10px; border-radius: 6px; text-align: center; border: 1px solid #313244; }
+</style>
+</head>
+<body>
+
+<div id="left">
+  <div class="toolbar">
+    <button id="btnT1" class="btn-p1" onclick="switchTab(1)">mBot2 Azul</button>
+    <button id="btnT2" class="btn-off" onclick="switchTab(2)">mBot2 Rojo (IA)</button>
+    <button class="btn-gray" onclick="exportJSON()">Exportar JSON</button>
+    <button class="btn-gray" onclick="document.getElementById('fileIn').click()">Importar JSON</button>
+    <input type="file" id="fileIn" accept=".json" style="display:none" onchange="importJSON(event)">
+    <button class="btn-gray" onclick="clearWS()">Limpiar</button>
+    <button class="btn-gray" style="margin-left:auto" onclick="loadExample()">Cargar Ejemplo</button>
+  </div>
+
+  <div class="editor-body">
+    <div class="palette">
+      <div class="pal-hint">ARRASTRA LOS BLOQUES AL PANEL DERECHO</div>
+
+      <div class="cat-title c-blue">mBot2 Chassis</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="moves_rpm">moves forward at 50 RPM</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="moves_cm">moves forward 100 cm until done</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="turns_deg">turns left 90 deg until done</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="em_single_sec">encoder motor EM1 rotates 50 RPM for 1s</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="em_single_rpm">encoder motor EM1 rotates at 50 RPM</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="em_single_deg">encoder motor EM1 rotates by 180 deg</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="em_dual_rpm">EM1 rotates 50 RPM, EM2 50 RPM</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="em_dual_pwr">EM1 rotates 50% power, EM2 50% power</div>
+      <div class="pal-item bg-mov" draggable="true" data-new="em_stop">stop encoder motor all</div>
+
+      <div class="cat-title c-green">Ultrasonic Sensor 2</div>
+      <div class="pal-item bg-sen" draggable="true" data-new="if_ultra_lt">if ultrasonic 2 (1) distance &lt; 50 cm</div>
+      <div class="pal-item bg-sen" draggable="true" data-new="if_ultra_oor">if ultrasonic 2 (1) out of range?</div>
+
+      <div class="cat-title c-green">Quad RGB Sensor</div>
+      <div class="pal-item bg-sen" draggable="true" data-new="if_rgb_l1r1">if quad rgb (1) L1, R1's line in status (0) 00 ?</div>
+      <div class="pal-item bg-sen" draggable="true" data-new="if_rgb_all">if quad rgb (1) line in status (0) 0000 ?</div>
+      <div class="pal-item bg-sen" draggable="true" data-new="if_rgb_probe">if quad rgb (1) probe R2 detects line?</div>
+
+      <div class="cat-title c-yellow">Control</div>
+      <div class="pal-item bg-ctl" draggable="true" data-new="if_else_ultra">if ultrasonic 2 (1) distance &lt; 50 then ... else ...</div>
+      <div class="pal-item bg-ctl" draggable="true" data-new="wait">wait 0.3 secs</div>
+    </div>
+
+    <div class="workspace" id="wsContainer"></div>
+  </div>
+</div>
+
+<div id="right">
+  <div class="sim-controls">
+    <button class="btn-play" onclick="startSim()">▶ Iniciar</button>
+    <button class="btn-stop" onclick="stopSim()">⏹ Parar</button>
+    <button class="btn-gray" onclick="resetArena()">🔄 Reset</button>
+    <label><input type="checkbox" id="aiChk" checked onchange="updateTabLabels()"> IA Rojo</label>
+    <label>Vel: <b id="spdLbl">1x</b> <input type="range" id="spdRng" min="1" max="4" step="0.5" value="1" oninput="document.getElementById('spdLbl').innerText=this.value+'x'"></label>
+  </div>
+
+  <canvas id="arenaCanvas" width="440" height="440"></canvas>
+
+  <div class="telem-bar" id="telemBar">Azul -> Ultra: 200cm | Quad RGB [L2 L1 R1 R2]: 0000 | L1,R1: 00</div>
+  <div class="status-bar" id="statusBar">Arrastra bloques desde la paleta izquierda hacia el área de programa.</div>
+</div>
+
+<script>
+const RGB_TARGETS = ["line", "background", "white", "red", "yellow", "green", "cyan", "blue", "purple", "black", "self-defined color"];
+const STATUS_2 = ["(0) 00", "(1) 01", "(2) 10", "(3) 11"];
+const STATUS_4 = [
+  "(0) 0000", "(1) 0001", "(2) 0010", "(3) 0011",
+  "(4) 0100", "(5) 0101", "(6) 0110", "(7) 0111",
+  "(8) 1000", "(9) 1001", "(10) 1010", "(11) 1011",
+  "(12) 1100", "(13) 1101", "(14) 1110", "(15) 1111"
+];
+
+let curTab = 1;
+let programs = { 1: [], 2: [] };
+let dragState = null;
+
+function createBlockData(type) {
+  const templates = {
+    moves_rpm: { type: "moves_rpm", dir: "forward", rpm: 80 },
+    moves_cm: { type: "moves_cm", dir: "backward", cm: 15 },
+    turns_deg: { type: "turns_deg", dir: "left", deg: 90 },
+    em_single_sec: { type: "em_single_sec", motor: "EM1", rpm: 80, sec: 1.0 },
+    em_single_rpm: { type: "em_single_rpm", motor: "EM1", rpm: 80 },
+    em_single_deg: { type: "em_single_deg", motor: "EM1", deg: 180 },
+    em_dual_rpm: { type: "em_dual_rpm", em1: 80, em2: 80 },
+    em_dual_pwr: { type: "em_dual_pwr", em1: 80, em2: 80 },
+    em_stop: { type: "em_stop", target: "all" },
+    if_ultra_lt: { type: "if_ultra_lt", port: "1", dist: 50, body: [] },
+    if_ultra_oor: { type: "if_ultra_oor", port: "1", body: [] },
+    if_rgb_l1r1: { type: "if_rgb_l1r1", port: "1", target: "line", status: "(3) 11", body: [] },
+    if_rgb_all: { type: "if_rgb_all", port: "1", target: "line", status: "(0) 0000", body: [] },
+    if_rgb_probe: { type: "if_rgb_probe", port: "1", probe: "R2", target: "line", body: [] },
+    if_else_ultra: { type: "if_else_ultra", port: "1", dist: 50, body: [], else_body: [] },
+    wait: { type: "wait", sec: 0.3 }
+  };
+  return JSON.parse(JSON.stringify(templates[type]));
+}
+
+// --- DRAG & DROP PALETA ---
+document.querySelectorAll('.pal-item').forEach(el => {
+  el.addEventListener('dragstart', e => {
+    dragState = { mode: 'new', block: createBlockData(el.dataset.new) };
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+});
+
+function isDescendant(parentBlk, targetArr) {
+  if (parentBlk.body === targetArr || parentBlk.else_body === targetArr) return true;
+  for (const key of ['body', 'else_body']) {
+    if (parentBlk[key]) {
+      for (const child of parentBlk[key]) {
+        if (isDescendant(child, targetArr)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function setupDropZone(zoneEl, targetArr, insertIndex) {
+  zoneEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    zoneEl.classList.add('drag-over');
+  });
+  zoneEl.addEventListener('dragleave', e => {
+    e.stopPropagation();
+    zoneEl.classList.remove('drag-over');
+  });
+  zoneEl.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    zoneEl.classList.remove('drag-over');
+    if (!dragState) return;
+
+    const idx = (insertIndex !== undefined) ? insertIndex : targetArr.length;
+    if (dragState.mode === 'new') {
+      targetArr.splice(idx, 0, dragState.block);
+    } else if (dragState.mode === 'move') {
+      const { srcArr, srcIdx, block } = dragState;
+      if (!isDescendant(block, targetArr)) {
+        srcArr.splice(srcIdx, 1);
+        let finalIdx = idx;
+        if (srcArr === targetArr && srcIdx < idx) finalIdx--;
+        targetArr.splice(finalIdx, 0, block);
+      }
+    }
+    dragState = null;
+    renderWS();
+  });
+}
+
+function makeSelect(blk, key, options) {
+  const sel = document.createElement('select');
+  options.forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt;
+    o.textContent = opt;
+    if (String(blk[key]) === String(opt)) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => { blk[key] = sel.value; };
+  sel.onmousedown = e => e.stopPropagation();
+  return sel;
+}
+
+function makeNumInput(blk, key, step = 1) {
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.step = step;
+  inp.value = blk[key];
+  inp.onchange = () => { blk[key] = parseFloat(inp.value) || 0; };
+  inp.onmousedown = e => e.stopPropagation();
+  return inp;
+}
+
+function txtSpan(t) {
+  const s = document.createElement('span');
+  s.textContent = t;
+  return s;
+}
+
+function renderBlockList(arr, container) {
+  arr.forEach((b, idx) => {
+    const t = b.type;
+    const card = document.createElement('div');
+    let cls = 'bg-ctl';
+    if (t.startsWith('moves') || t.startsWith('turns') || t.startsWith('em_')) cls = 'bg-mov';
+    else if (t.startsWith('if_rgb') || t.startsWith('if_ultra')) cls = 'bg-sen';
+    card.className = `ws-block ${cls}`;
+    card.draggable = true;
+
+    card.addEventListener('dragstart', e => {
+      e.stopPropagation();
+      dragState = { mode: 'move', srcArr: arr, srcIdx: idx, block: b };
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    // Permitir soltar justo encima de este bloque para reordenar
+    card.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dragState) return;
+      if (dragState.mode === 'new') {
+        arr.splice(idx, 0, dragState.block);
+      } else if (dragState.mode === 'move') {
+        const { srcArr, srcIdx, block } = dragState;
+        if (block !== b && !isDescendant(block, arr)) {
+          srcArr.splice(srcIdx, 1);
+          let finalIdx = idx;
+          if (srcArr === arr && srcIdx < idx) finalIdx--;
+          arr.splice(finalIdx, 0, block);
+        }
+      }
+      dragState = null;
+      renderWS();
+    });
+
+    const row = document.createElement('div');
+    row.className = 'ws-row';
+
+    const grip = document.createElement('span');
+    grip.className = 'grip';
+    grip.textContent = '::';
+    row.appendChild(grip);
+
+    if (t === 'moves_rpm') {
+      row.append(txtSpan('moves'), makeSelect(b, 'dir', ['forward', 'backward']), txtSpan('at'), makeNumInput(b, 'rpm'), txtSpan('RPM'));
+    } else if (t === 'moves_cm') {
+      row.append(txtSpan('moves'), makeSelect(b, 'dir', ['forward', 'backward']), makeNumInput(b, 'cm'), txtSpan('cm until done'));
+    } else if (t === 'turns_deg') {
+      row.append(txtSpan('turns'), makeSelect(b, 'dir', ['left', 'right']), makeNumInput(b, 'deg'), txtSpan('deg until done'));
+    } else if (t === 'em_single_sec') {
+      row.append(txtSpan('encoder motor'), makeSelect(b, 'motor', ['EM1', 'EM2']), txtSpan('rotates at'), makeNumInput(b, 'rpm'), txtSpan('RPM for'), makeNumInput(b, 'sec', 0.1), txtSpan('secs'));
+    } else if (t === 'em_single_rpm') {
+      row.append(txtSpan('encoder motor'), makeSelect(b, 'motor', ['EM1', 'EM2']), txtSpan('rotates at'), makeNumInput(b, 'rpm'), txtSpan('RPM'));
+    } else if (t === 'em_single_deg') {
+      row.append(txtSpan('encoder motor'), makeSelect(b, 'motor', ['EM1', 'EM2']), txtSpan('rotates by'), makeNumInput(b, 'deg'), txtSpan('deg'));
+    } else if (t === 'em_dual_rpm') {
+      row.append(txtSpan('EM1 rotates at'), makeNumInput(b, 'em1'), txtSpan('RPM, EM2 at'), makeNumInput(b, 'em2'), txtSpan('RPM'));
+    } else if (t === 'em_dual_pwr') {
+      row.append(txtSpan('EM1 rotates at'), makeNumInput(b, 'em1'), txtSpan('% power, EM2 at'), makeNumInput(b, 'em2'), txtSpan('% power'));
+    } else if (t === 'em_stop') {
+      row.append(txtSpan('stop encoder motor'), makeSelect(b, 'target', ['all', 'EM1', 'EM2']));
+    } else if (t === 'wait') {
+      row.append(txtSpan('wait'), makeNumInput(b, 'sec', 0.1), txtSpan('secs'));
+    } else if (t === 'if_ultra_lt') {
+      row.append(txtSpan('if ultrasonic 2'), makeSelect(b, 'port', ['1', '2']), txtSpan('distance to object (cm) <'), makeNumInput(b, 'dist'));
+    } else if (t === 'if_ultra_oor') {
+      row.append(txtSpan('if ultrasonic 2'), makeSelect(b, 'port', ['1', '2']), txtSpan('out of range?'));
+    } else if (t === 'if_rgb_l1r1') {
+      row.append(txtSpan('if quad rgb'), makeSelect(b, 'port', ['1', '2']), txtSpan("L1, R1's"), makeSelect(b, 'target', RGB_TARGETS), txtSpan('in status'), makeSelect(b, 'status', STATUS_2), txtSpan('?'));
+    } else if (t === 'if_rgb_all') {
+      row.append(txtSpan('if quad rgb'), makeSelect(b, 'port', ['1', '2']), makeSelect(b, 'target', RGB_TARGETS), txtSpan('in status'), makeSelect(b, 'status', STATUS_4), txtSpan('?'));
+    } else if (t === 'if_rgb_probe') {
+      row.append(txtSpan('if quad rgb'), makeSelect(b, 'port', ['1', '2']), txtSpan('probe'), makeSelect(b, 'probe', ['L2', 'L1', 'R1', 'R2']), txtSpan('detects'), makeSelect(b, 'target', RGB_TARGETS), txtSpan('?'));
+    } else if (t === 'if_else_ultra') {
+      row.append(txtSpan('if ultrasonic 2'), makeSelect(b, 'port', ['1', '2']), txtSpan('distance (cm) <'), makeNumInput(b, 'dist'), txtSpan('then:'));
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-del';
+    delBtn.textContent = '✕';
+    delBtn.onclick = e => { e.stopPropagation(); arr.splice(idx, 1); renderWS(); };
+    row.appendChild(delBtn);
+    card.appendChild(row);
+
+    // Sub-zona THEN para bloques condicionales
+    if (b.body) {
+      const subZone = document.createElement('div');
+      subZone.className = 'drop-zone sub-then';
+      setupDropZone(subZone, b.body);
+      if (b.body.length === 0) {
+        const msg = document.createElement('div');
+        msg.className = 'empty-msg';
+        msg.textContent = '(Suelta bloques aquí)';
+        subZone.appendChild(msg);
+      } else {
+        renderBlockList(b.body, subZone);
+      }
+      card.appendChild(subZone);
+    }
+
+    // Sub-zona ELSE si aplica
+    if (b.else_body) {
+      const elLbl = document.createElement('span');
+      elLbl.className = 'else-label';
+      elLbl.textContent = 'else:';
+      card.appendChild(elLbl);
+
+      const elseZone = document.createElement('div');
+      elseZone.className = 'drop-zone sub-else';
+      setupDropZone(elseZone, b.else_body);
+      if (b.else_body.length === 0) {
+        const msg = document.createElement('div');
+        msg.className = 'empty-msg';
+        msg.textContent = '(Suelta bloques del ELSE aquí)';
+        elseZone.appendChild(msg);
+      } else {
+        renderBlockList(b.else_body, elseZone);
+      }
+      card.appendChild(elseZone);
+    }
+
+    container.appendChild(card);
+  });
+}
+
+function renderWS() {
+  const ws = document.getElementById('wsContainer');
+  ws.innerHTML = '';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'evt-header bg-evt';
+  hdr.textContent = '🚩 when CyberPi starts up  →  forever:';
+  ws.appendChild(hdr);
+
+  const mainZone = document.createElement('div');
+  mainZone.className = 'drop-zone';
+  mainZone.style.minHeight = '260px';
+  setupDropZone(mainZone, programs[curTab]);
+
+  if (programs[curTab].length === 0) {
+    const msg = document.createElement('div');
+    msg.className = 'empty-msg';
+    msg.textContent = 'Arrastra y suelta bloques desde la izquierda aquí';
+    mainZone.appendChild(msg);
+  } else {
+    renderBlockList(programs[curTab], mainZone);
+  }
+  ws.appendChild(mainZone);
+}
+
+function switchTab(id) {
+  curTab = id;
+  updateTabLabels();
+  renderWS();
+}
+
+function updateTabLabels() {
+  const aiOn = document.getElementById('aiChk').checked;
+  document.getElementById('btnT1').className = curTab === 1 ? 'btn-p1' : 'btn-off';
+  const b2 = document.getElementById('btnT2');
+  b2.className = curTab === 2 ? 'btn-p2' : 'btn-off';
+  b2.textContent = aiOn ? 'mBot2 Rojo (IA)' : 'mBot2 Rojo (Manual)';
+}
+
+function clearWS() {
+  programs[curTab] = [];
+  renderWS();
+}
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(programs[curTab], null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mbot2_${curTab === 1 ? 'azul' : 'rojo'}.json`;
+  a.click();
+}
+
+function importJSON(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      programs[curTab] = JSON.parse(ev.target.result);
+      renderWS();
+    } catch (err) {
+      alert('Archivo JSON inválido');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function loadExample() {
+  programs[curTab] = [
+    {
+      type: 'if_rgb_probe', port: '1', probe: 'L1', target: 'line',
+      body: [
+        { type: 'moves_cm', dir: 'backward', cm: 15 },
+        { type: 'turns_deg', dir: 'right', deg: 110 }
+      ]
+    },
+    {
+      type: 'if_rgb_probe', port: '1', probe: 'R1', target: 'line',
+      body: [
+        { type: 'moves_cm', dir: 'backward', cm: 15 },
+        { type: 'turns_deg', dir: 'left', deg: 110 }
+      ]
+    },
+    {
+      type: 'if_else_ultra', port: '1', dist: 85,
+      body: [
+        { type: 'moves_rpm', dir: 'forward', rpm: 180 }
+      ],
+      else_body: [
+        { type: 'em_dual_rpm', em1: -60, em2: 60 }
+      ]
+    }
+  ];
+  renderWS();
+}
+
+// --- MOTOR DE SIMULACIÓN Y FÍSICA ---
+const canvas = document.getElementById('arenaCanvas');
+const ctx = canvas.getContext('2d');
+const CX = 220, CY = 220, R_DOHYO = 190, BORDER_W = 15;
+let simRunning = false;
+let rafId = null;
+
+const getSpeed = () => parseFloat(document.getElementById('spdRng').value) || 1;
+const sleep = ms => new Promise(res => setTimeout(res, ms / getSpeed()));
+
+class MBot2 {
+  constructor(col, x, y, a) {
+    this.col = col; this.sx = x; this.sy = y; this.sa = a; this.rad = 20;
+    this.reset();
+  }
+  reset() {
+    this.x = this.sx; this.y = this.sy; this.a = this.sa;
+    this.vl = 0; this.vr = 0;
+    this.ultra = 200;
+    this.rgb = { L2: 0, L1: 0, R1: 0, R2: 0 };
+  }
+  evalTarget(probeOnWhite, target) {
+    if (target === 'line' || target === 'white') return probeOnWhite ? 1 : 0;
+    if (target === 'background' || target === 'black') return probeOnWhite ? 0 : 1;
+    return 0;
+  }
+  step(opp) {
+    const spd = getSpeed();
+    const vLin = (this.vl + this.vr) / 2.0;
+    const vAng = (this.vl - this.vr) / 40.0;
+    this.a += vAng * spd;
+    this.x += Math.cos(this.a) * vLin * spd;
+    this.y += Math.sin(this.a) * vLin * spd;
+
+    const offsets = { L2: -13, L1: -5, R1: 5, R2: 13 };
+    for (const [name, off] of Object.entries(offsets)) {
+      const px = this.x + (this.rad - 2) * Math.cos(this.a) - off * Math.sin(this.a);
+      const py = this.y + (this.rad - 2) * Math.sin(this.a) + off * Math.cos(this.a);
+      this.rgb[name] = Math.hypot(px - CX, py - CY) >= (R_DOHYO - BORDER_W) ? 1 : 0;
+    }
+
+    const dx = opp.x - this.x, dy = opp.y - this.y;
+    const dist = Math.hypot(dx, dy) - this.rad * 2;
+    let diff = Math.atan2(dy, dx) - this.a;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    this.ultra = (Math.abs(diff) < 0.32 && dist < 170) ? Math.max(2, Math.round(dist * 0.6)) : 200;
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.a);
+
+    // Cono Ultrasónico
+    ctx.beginPath();
+    ctx.moveTo(this.rad, 0);
+    ctx.arc(this.rad, 0, this.ultra < 170 ? this.ultra / 0.6 : 85, -0.32, 0.32);
+    ctx.closePath();
+    ctx.fillStyle = this.ultra < 170 ? 'rgba(250, 204, 21, 0.25)' : 'rgba(255, 255, 255, 0.05)';
+    ctx.fill();
+
+    // Chasis
+    ctx.fillStyle = this.col;
+    ctx.fillRect(-this.rad, -this.rad, this.rad * 2, this.rad * 2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
+    ctx.strokeRect(-this.rad, -this.rad, this.rad * 2, this.rad * 2);
+
+    // Pala frontal
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(this.rad - 3, -this.rad + 2, 6, this.rad * 2 - 4);
+
+    // 4 Sondas Quad RGB (L2, L1, R1, R2)
+    const offsets = { L2: -13, L1: -5, R1: 5, R2: 13 };
+    for (const [name, off] of Object.entries(offsets)) {
+      ctx.fillStyle = this.rgb[name] === 1 ? '#facc15' : '#0f172a';
+      ctx.beginPath();
+      ctx.arc(this.rad - 2, off, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+const r1 = new MBot2('#3b82f6', CX - 75, CY, 0);
+const r2 = new MBot2('#ef4444', CX + 75, CY, Math.PI);
+
+async function execList(r, list) {
+  for (const b of list) {
+    if (!simRunning) return;
+    const t = b.type;
+    if (t === 'moves_rpm') {
+      const v = (Math.min(200, Math.max(0, b.rpm)) / 200) * 3.5 * (b.dir === 'forward' ? 1 : -1);
+      r.vl = v; r.vr = v;
+    } else if (t === 'moves_cm') {
+      const d = b.dir === 'forward' ? 1 : -1;
+      r.vl = d * 2.5; r.vr = d * 2.5;
+      await sleep(Math.max(50, Math.abs(b.cm) * 25));
+      r.vl = 0; r.vr = 0;
+    } else if (t === 'turns_deg') {
+      const d = b.dir === 'right' ? 1 : -1;
+      r.vl = d * 2.2; r.vr = -d * 2.2;
+      await sleep(Math.max(50, Math.abs(b.deg) * 4.5));
+      r.vl = 0; r.vr = 0;
+    } else if (t === 'em_single_sec') {
+      const v = (Math.max(-200, Math.min(200, b.rpm)) / 200) * 3.5;
+      if (b.motor === 'EM1') r.vl = v; else r.vr = v;
+      await sleep(Math.max(50, b.sec * 1000));
+      if (b.motor === 'EM1') r.vl = 0; else r.vr = 0;
+    } else if (t === 'em_single_rpm') {
+      const v = (Math.max(-200, Math.min(200, b.rpm)) / 200) * 3.5;
+      if (b.motor === 'EM1') r.vl = v; else r.vr = v;
+    } else if (t === 'em_single_deg') {
+      const d = b.deg >= 0 ? 1 : -1;
+      if (b.motor === 'EM1') r.vl = d * 2.2; else r.vr = d * 2.2;
+      await sleep(Math.max(50, Math.abs(b.deg) * 4.5));
+      if (b.motor === 'EM1') r.vl = 0; else r.vr = 0;
+    } else if (t === 'em_dual_rpm') {
+      r.vl = (Math.max(-200, Math.min(200, b.em1)) / 200) * 3.5;
+      r.vr = (Math.max(-200, Math.min(200, b.em2)) / 200) * 3.5;
+    } else if (t === 'em_dual_pwr') {
+      r.vl = (Math.max(-100, Math.min(100, b.em1)) / 100) * 3.5;
+      r.vr = (Math.max(-100, Math.min(100, b.em2)) / 100) * 3.5;
+    } else if (t === 'em_stop') {
+      if (b.target === 'all' || b.target === 'EM1') r.vl = 0;
+      if (b.target === 'all' || b.target === 'EM2') r.vr = 0;
+    } else if (t === 'wait') {
+      await sleep(Math.max(10, b.sec * 1000));
+    } else if (t === 'if_ultra_lt') {
+      if (r.ultra < b.dist) await execList(r, b.body);
+    } else if (t === 'if_ultra_oor') {
+      if (r.ultra >= 180) await execList(r, b.body);
+    } else if (t === 'if_rgb_l1r1') {
+      const expected = b.status.split(' ')[1];
+      const actual = `${r.evalTarget(r.rgb.L1, b.target)}${r.evalTarget(r.rgb.R1, b.target)}`;
+      if (actual === expected) await execList(r, b.body);
+    } else if (t === 'if_rgb_all') {
+      const expected = b.status.split(' ')[1];
+      const actual = `${r.evalTarget(r.rgb.L2, b.target)}${r.evalTarget(r.rgb.L1, b.target)}${r.evalTarget(r.rgb.R1, b.target)}${r.evalTarget(r.rgb.R2, b.target)}`;
+      if (actual === expected) await execList(r, b.body);
+    } else if (t === 'if_rgb_probe') {
+      if (r.evalTarget(r.rgb[b.probe], b.target) === 1) await execList(r, b.body);
+    } else if (t === 'if_else_ultra') {
+      if (r.ultra < b.dist) await execList(r, b.body);
+      else await execList(r, b.else_body);
+    }
+  }
+}
+
+async function runLoop(r, list) {
+  while (simRunning) {
+    if (list.length === 0) await sleep(40);
+    else {
+      await execList(r, list);
+      await sleep(20);
+    }
+  }
+}
+
+async function runAI(r) {
+  while (simRunning) {
+    if (r.rgb.L1 || r.rgb.L2) {
+      r.vl = -2.6; r.vr = -2.6; await sleep(300);
+      r.vl = 2.2; r.vr = -2.2; await sleep(350);
+    } else if (r.rgb.R1 || r.rgb.R2) {
+      r.vl = -2.6; r.vr = -2.6; await sleep(300);
+      r.vl = -2.2; r.vr = 2.2; await sleep(350);
+    } else if (r.ultra < 85) {
+      r.vl = 3.2; r.vr = 3.2; await sleep(30);
+    } else {
+      r.vl = 1.4; r.vr = -1.4; await sleep(30);
+    }
+  }
+}
+
+function drawArena() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Dohyo
+  ctx.beginPath(); ctx.arc(CX, CY, R_DOHYO, 0, Math.PI * 2); ctx.fillStyle = '#f8fafc'; ctx.fill();
+  ctx.beginPath(); ctx.arc(CX, CY, R_DOHYO - BORDER_W, 0, Math.PI * 2); ctx.fillStyle = '#1e293b'; ctx.fill();
+
+  // Líneas Shikiri-sen
+  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(CX - 30, CY - 20); ctx.lineTo(CX - 30, CY + 20);
+  ctx.moveTo(CX + 30, CY - 20); ctx.lineTo(CX + 30, CY + 20);
+  ctx.stroke();
+
+  r1.draw();
+  r2.draw();
+}
+
+function gameLoop() {
+  if (!simRunning) return;
+  r1.step(r2);
+  r2.step(r1);
+
+  // Colisión y empuje
+  const dx = r2.x - r1.x, dy = r2.y - r1.y, d = Math.hypot(dx, dy), minD = r1.rad + r2.rad;
+  if (d < minD && d > 0) {
+    const ov = minD - d, nx = dx / d, ny = dy / d;
+    const p1 = Math.max(0.2, (r1.vl + r1.vr) / 2.0);
+    const p2 = Math.max(0.2, (r2.vl + r2.vr) / 2.0);
+    const tot = p1 + p2;
+    r1.x -= nx * ov * (p2 / tot); r1.y -= ny * ov * (p2 / tot);
+    r2.x += nx * ov * (p1 / tot); r2.y += ny * ov * (p1 / tot);
+  }
+
+  drawArena();
+
+  const rgbAll = `${r1.rgb.L2}${r1.rgb.L1}${r1.rgb.R1}${r1.rgb.R2}`;
+  const rgbMid = `${r1.rgb.L1}${r1.rgb.R1}`;
+  document.getElementById('telemBar').textContent = `Azul -> Ultra: ${r1.ultra}cm | Quad RGB [L2 L1 R1 R2]: ${rgbAll} | L1,R1: ${rgbMid}`;
+
+  const stBar = document.getElementById('statusBar');
+  if (Math.hypot(r1.x - CX, r1.y - CY) > R_DOHYO + 5) {
+    stopSim();
+    stBar.innerHTML = '🏆 ¡Gana <span style="color:#ef4444">mBot2 Rojo</span>! (Azul fuera del Dohyo)';
+  } else if (Math.hypot(r2.x - CX, r2.y - CY) > R_DOHYO + 5) {
+    stopSim();
+    stBar.innerHTML = '🏆 ¡Gana <span style="color:#3b82f6">mBot2 Azul</span>! (Rojo fuera del Dohyo)';
+  } else {
+    rafId = requestAnimationFrame(gameLoop);
+  }
+}
+
+function startSim() {
+  if (simRunning) return;
+  resetArena();
+  simRunning = true;
+  document.getElementById('statusBar').textContent = '⚔️ ¡Combate en curso!';
+  runLoop(r1, programs[1]);
+  if (document.getElementById('aiChk').checked) runAI(r2);
+  else runLoop(r2, programs[2]);
+  gameLoop();
+}
+
+function stopSim() {
+  simRunning = false;
+  r1.vl = r1.vr = 0;
+  r2.vl = r2.vr = 0;
+  if (rafId) cancelAnimationFrame(rafId);
+}
+
+function resetArena() {
+  stopSim();
+  r1.reset();
+  r2.reset();
+  drawArena();
+  document.getElementById('statusBar').textContent = 'Arena reiniciada. Presiona ▶ Iniciar.';
+}
+
+loadExample();
+updateTabLabels();
+drawArena();
+</script>
+</body>
+</html>
